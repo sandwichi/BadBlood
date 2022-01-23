@@ -453,16 +453,31 @@ Function CreateUser
 
     $pwd = ""
     $passwordType = 1..1000|get-random
-    if ($passwordType -lt 50) { 
-        $pwd = New-SWRandomPassword -MinPasswordLength 12 -MaxPasswordLength 24
+    if ($passwordType -lt 10) { 
+        $pwd = New-SWRandomPassword -MinPasswordLength 7 -MaxPasswordLength 24
     }
-    elseif ($passwordType -ge 50 -And $passwordType -lt 100) {
-        $pwd = "Winter22"
+    elseif ($passwordType -ge 10 -And $passwordType -lt 50) {
+        $pwd = "Winter21"
     }
-    elseif ($passwordType -ge 100 -And $passwordType -lt 200) {
-        $pwd = "fakedomainsvc1"
+    elseif ($passwordType -ge 50 -And $passwordType -lt 90) {
+        $pwd = "Spring21"
     }
-    elseif ($passwordType -ge 200 -And $passwordType -lt 800) {
+    elseif ($passwordType -ge 90 -And $passwordType -lt 100) {
+        $pwd = "changeme"
+    }
+    elseif ($passwordType -ge 100 -And $passwordType -lt 110) {
+        $pwd = "fakedomain1"
+    }
+    elseif ($passwordType -ge 110 -And $passwordType -lt 120) {
+        $pwd = "passwordssuck123"
+    }
+    elseif ($passwordType -ge 120 -And $passwordType -lt 150) {
+        $pwd = "Fall2021"
+    }
+    elseif ($passwordType -ge 150 -And $passwordType -lt 200) {
+        $pwd = "Summer21"
+    }
+    elseif ($passwordType -ge 200 -And $passwordType -lt 700) {
         while($pwd.length -lt 7) {
             $pwd_first = New-WordBasedPassword -WordCount 1 -NoSpaces
             $pwd_second = New-SWRandomPassword -MinPasswordLength 1 -MaxPasswordLength 4 -InputStrings 12345
