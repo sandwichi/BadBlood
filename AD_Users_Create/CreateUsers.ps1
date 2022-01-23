@@ -1,4 +1,17 @@
-﻿Function CreateUser{
+﻿#region Script-Variables
+
+# DateStamp format
+$Script:DateStampFormat = 'yyyyMMdd HH:mm:ss'
+
+# For: New-WordBasedPassword
+$Script:PasswordWordList = ( [IO.FileInfo] ( Join-Path -Path $PSScriptRoot -ChildPath 'words.txt') )
+
+# for display purposes
+$Script:HeaderCharacters = ('=' * 20)
+#endregion Script-Variables
+
+Function CreateUser
+{
 
     <#
         .SYNOPSIS
@@ -90,9 +103,179 @@
             $scriptpath = $ScriptDir
         }
     
+        function New-RandomNumber
+        {
+             [CmdletBinding()]
+             [OutputType()]
+        
+             param
+             (
+                  [Parameter()]
+                  [ValidateNotNullOrEmpty()]
+                  # Minimum random number value
+                  [Int]
+                  $MinimumNumber = 1
+                  ,
+                  [Parameter()]
+                  [ValidateNotNullOrEmpty()]
+                  # Maximum random number value
+                  [Int]
+                  $MaximumNumber = 100
+             )
+        
+             process
+             {
+                  # From https://stackoverflow.com/questions/6299197/rngcryptoserviceprovider-generate-number-in-a-range-faster-and-retain-distribu which references an MSDN magazine article I could not find
+        
+                  $rngProvider = (New-Object -TypeName System.Security.Cryptography.RNGCryptoServiceProvider)
+                  while ($true)
+                  {
+                       if ( $MinimumNumber -eq $MaximumNumber ) { return $MaximumNumber }
+        
+                       $ranNumByteArr = New-Object -TypeName byte[] -ArgumentList 4
+                       $rngProvider.GetBytes( $ranNumByteArr )
+                       $randomNumber = [BitConverter]::ToInt32( $ranNumByteArr,0 )
+        
+                       $intMaxValue = (1 + [Int]::MaxValue)
+                       $numRange = ( $MaximumNumber - $MinimumNumber )
+                       $remainder = ( $intMaxValue - $numRange )
+        
+                       if ( $randomNumber -lt ( $intMaxValue - $numRange ) )
+                       {
+                            $retValue = ( [Int] ( $MinimumNumber + ( $randomNumber % $numRange ) ) )
+        
+                            if ($retValue -lt 0) { return ( $retValue * -1 ) } else { return $retValue }
+                       }
+                  }
+             }
+        }
+        
+    function New-WordBasedPassword
+    {
+         [CmdletBinding()]
+         [OutputType([String])]
     
+         param
+         (
+              [Parameter()]
+              [ValidateNotNullOrEmpty()]
+              # Number of words to include in password
+              [Int]
+              $WordCount = 1
+              ,
+              [Parameter()]
+              [ValidateNotNullOrEmpty()]
+              # Absolute path to file containing word list. Words must be a plain text file with each word or phrase on a single line
+              [System.IO.FileInfo]
+              $WordListLiteralPath = ( $Script:PasswordWordList )
+              ,
+              [Parameter()]
+              # Forces reload of the world list if it is already cached
+              [Switch]
+              $ForceWordListReload
+              ,
+              [Parameter()]
+              # Returns word list without spaces
+              [Switch]
+              $NoSpaces
+         )
     
-    function New-SWRandomPassword {
+         process
+         {  
+              
+              Write-Debug ('Word list expected location: {0}' -f $WordListLiteralPath.FullName)
+    
+              if (-not (Test-Path -LiteralPath $WordListLiteralPath.FullName -PathType Leaf))
+              {
+                   throw (New-Object -TypeName System.OperationCanceledException -ArgumentList ('Cannot access word list at "{0}". That should be there. What have you done?!  If you need to get the word file again, it is words.txt at https://github.com/dwyl/english-words' -f $WordListLiteralPath.FullName))
+              }
+              else
+              {
+                   Write-Verbose ('Word list exists at {0}' -f $WordListLiteralPath.FullName)
+              }
+    
+              if ( $PSBoundParameters.ContainsKey('WordListLiteralPath') )
+              {
+                   Write-Verbose ('Custom word list provided at path: {0}' -f $WordListLiteralPath.FullName)
+                   $Script:WordCache = ([String[]] @( Get-Content -LiteralPath $WordListLiteralPath.FullName -ErrorAction Stop ))
+              }
+              else
+              {
+                   if ( ($Script:WordCache.Count -ne 0) -and ($ForceWordListReload.IsPresent) )
+                   {
+                        Write-Verbose ('Cached word list found but a refresh of word cache is requested. Loading word list ...')
+                        $wordListLoadStartTime = (Get-Date)
+                        $Script:WordCache = ([String[]] @( Get-Content -LiteralPath $WordListLiteralPath.FullName -ErrorAction Stop ))
+                        Write-Verbose ('Word list loaded in {0} and contains {1} words' -f ((Get-Date).Subtract($wordListLoadStartTime)),$Script:WordCache.Count)
+                   }
+                   elseif ($Script:WordCache.Count -gt 0)
+                   {
+                        Write-Verbose ('Cached word list found. Current word count: {0}' -f $Script:WordCache.Count)
+                   }
+                   else
+                   {
+                        Write-Verbose ('No cached word list found. Loading word list ...')
+                        $wordListLoadStartTime = (Get-Date)
+                        $Script:WordCache = ([String[]] @( Get-Content -LiteralPath $WordListLiteralPath.FullName -ErrorAction Stop ))
+                        Write-Verbose ('Word list loaded in {0} and contains {1} words' -f ((Get-Date).Subtract($wordListLoadStartTime)),$Script:WordCache.Count)
+                   }
+              }
+    
+              Write-Verbose ('Generating password ...')
+    
+              $selectedWordList = New-Object -TypeName System.Collections.ArrayList
+              for ( $i = 0; $i -lt $WordCount; $i++ )
+              {
+                   Write-Debug ('Password Generation Iteration {0:00}' -f $i)
+    
+                   $wordIndex = New-RandomNumber -MinimumNumber 0 -MaximumNumber $Script:WordCache.Count
+                   Write-Debug ('Total Word Count: {0}, Word Index: {1}' -f $Script:WordCache.Count,$wordIndex)
+    
+                   $chosenWord = $Script:WordCache[$wordIndex]
+                   $null = $selectedWordList.Add( $chosenWord )
+                   Write-Debug ('Selected Word: {0}' -f $chosenWord)
+              }
+    
+              $sBuilder = New-Object -TypeName System.Text.StringBuilder
+              for ( $i = 0; $i -lt $selectedWordList.Count; $i++ )
+              {
+                   if ( ( ((New-RandomNumber) % 2)  -eq 0  ) )
+                   {
+                        $null = $sBuilder.Append( ('{0} ' -f $selectedWordList[$i].ToLower() ) )
+                   }
+                   else
+                   {
+                        if ( ( ((New-RandomNumber) % 2)  -eq 0  ) )
+                        {
+                             $null = $sBuilder.Append( ('{0} ' -f  $selectedWordList[$i].ToUpper() ) )
+                        }
+                        else
+                        {
+                             $null = $sBuilder.Append(  ('{0} ' -f ( (Get-Culture).TextInfo.ToTitleCase( $selectedWordList[$i].ToLower() ) ) ) )
+                        }
+                   }
+              }
+    
+              $returnString = [String]::Empty
+              # Remove spaces from password if requested
+              if ($NoSpaces.IsPresent)
+              {
+                   Write-Debug ('-NoSpaces Parameter IS DETECTED. WILL remove spaces')
+                   $returnString = ( [String] ( $sBuilder.ToString().Replace(' ','').Trim() ) )
+              }
+              else
+              {
+                   Write-Debug ('-NoSpaces parameter IS NOT DETECTED.WILL NOT remove spaces')
+                   $returnString = ( [String] ($sBuilder.ToString().Trim() ) )
+              }
+    
+              # Return password
+              Write-Output ( $returnString )
+         }
+    }   
+    
+    function New-SWRandomPassword
+    {
         <#
         .Synopsis
            Generates one or more complex passwords designed to fulfill the requirements for Active Directory
@@ -267,16 +450,41 @@
         
     #Need to figure out how to do the L attribute
     $description = 'Created with secframe.com/badblood.'
-    $pwd = New-SWRandomPassword -MinPasswordLength 22 -MaxPasswordLength 25
+
+    $pwd = ""
+    $passwordType = 1..1000|get-random
+    if ($passwordType -lt 50) { 
+        $pwd = New-SWRandomPassword -MinPasswordLength 12 -MaxPasswordLength 24
+    }
+    elseif ($passwordType -ge 50 -And $passwordType -lt 100) {
+        $pwd = "Winter22"
+    }
+    elseif ($passwordType -ge 100 -And $passwordType -lt 200) {
+        $pwd = "fakedomainsvc1"
+    }
+    elseif ($passwordType -ge 200 -And $passwordType -lt 800) {
+        while($pwd.length -lt 7) {
+            $pwd_first = New-WordBasedPassword -WordCount 1 -NoSpaces
+            $pwd_second = New-SWRandomPassword -MinPasswordLength 1 -MaxPasswordLength 4 -InputStrings 12345
+            $pwd = "$($pwd_first)$($pwd_second)"
+        }
+    }
+    else {
+        while($pwd.length -lt 7) {
+            $pwd_first = New-WordBasedPassword -WordCount 3 -NoSpaces
+            $pwd_second = New-SWRandomPassword -MinPasswordLength 1 -MaxPasswordLength 4 -InputStrings 12345
+            $pwd = "$($pwd_first)$($pwd_second)"
+        }
+    }
+    #$pwd = New-SWRandomPassword -MinPasswordLength 6 -MaxPasswordLength 16
     #======================================================================
     # 
     
     $passwordinDesc = 1..1000|get-random
-        
-        $pwd = New-SWRandomPassword -MinPasswordLength 22 -MaxPasswordLength 25
-            if ($passwordinDesc -lt 10) { 
-                $description = 'Just so I dont forget my password is ' + $pwd 
-            }else{}
+    #$pwd = New-SWRandomPassword -MinPasswordLength 6 -MaxPasswordLength 16
+    if ($passwordinDesc -lt 10) { 
+        $description = 'Just so I dont forget my password is ' + $pwd 
+    }else{}
     if($name.length -gt 20){
         $name = $name.substring(0,20)
     }

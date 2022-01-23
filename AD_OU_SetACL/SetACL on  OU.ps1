@@ -1,4 +1,5 @@
-﻿ $drive = "ad"
+﻿
+ $drive = "ad"
  
 #====================
 #Get a reference to the RootDSE of the current domain

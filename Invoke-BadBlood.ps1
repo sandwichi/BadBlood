@@ -47,6 +47,7 @@ param
       HelpMessage = 'Make non-interactive for automation')]
    [switch]$NonInteractive
 )
+$PSDefaultParameterValues = @{"*:Server"="127.0.0.1"}
 function Get-ScriptDirectory {
    Split-Path -Parent $PSCommandPath
 }
